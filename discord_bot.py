@@ -294,8 +294,15 @@ async def notify_owner(title: str, description: str, color: int):
 # ============================================================================
 
 @bot.slash_command(name="add_account", description="Add a new Modal account")
-async def add_account(ctx: discord.ApplicationContext):
-    """Add a new Modal account via popup form."""
+async def add_account(
+    ctx: discord.ApplicationContext,
+    username: str,
+    token_id: str,
+    token_secret: str
+):
+    """Add a new Modal account via slash command parameters."""
+    
+    await ctx.defer(ephemeral=True)
     
     # Check if max accounts reached
     if account_manager.get_account_count() >= config.MAX_ACCOUNTS:
@@ -305,65 +312,32 @@ async def add_account(ctx: discord.ApplicationContext):
         )
         return
     
-    # Create modal popup
-    class AddAccountModal(discord.ui.Modal):
-        def __init__(self):
-            super().__init__(title="Add Modal Account")
-            
-            self.add_item(discord.ui.InputText(
-                label="Username",
-                placeholder="account_name",
-                required=True,
-                max_length=50
-            ))
-            
-            self.add_item(discord.ui.InputText(
-                label="Token ID",
-                placeholder="ak-xxxxxxxxxxxxx",
-                required=True,
-                max_length=100
-            ))
-            
-            self.add_item(discord.ui.InputText(
-                label="Token Secret",
-                placeholder="as-xxxxxxxxxxxxx",
-                required=True,
-                max_length=100
-            ))
-        
-        async def callback(self, interaction: discord.Interaction):
-            username = self.children[0].value
-            token_id = self.children[1].value
-            token_secret = self.children[2].value
-            
-            # Add account
-            success, msg = account_manager.add_account(username, token_id, token_secret)
-            
-            if success:
-                # Create Modal profile
-                success2, msg2 = await modal_manager.create_profile(username, token_id, token_secret)
-                
-                if success2:
-                    embed = discord.Embed(
-                        title=f"{ICONS['success']} Account Added",
-                        description=f"Account `{username}` added successfully!\n\n"
-                                    f"Balance: {format_currency(config.INITIAL_BALANCE)}\n"
-                                    f"Status: Ready",
-                        color=COLORS['success']
-                    )
-                    await interaction.response.send_message(embed=embed, ephemeral=True)
-                else:
-                    await interaction.response.send_message(
-                        f"{ICONS['warning']} Account added to database but Modal profile creation failed: {msg2}",
-                        ephemeral=True
-                    )
-            else:
-                await interaction.response.send_message(
-                    f"{ICONS['error']} {msg}",
-                    ephemeral=True
-                )
+    # Add account
+    success, msg = account_manager.add_account(username, token_id, token_secret)
     
-    await ctx.send_modal(AddAccountModal())
+    if success:
+        # Create Modal profile
+        success2, msg2 = await modal_manager.create_profile(username, token_id, token_secret)
+        
+        if success2:
+            embed = discord.Embed(
+                title=f"{ICONS['success']} Account Added",
+                description=f"Account `{username}` added successfully!\n\n"
+                            f"Balance: {format_currency(config.INITIAL_BALANCE)}\n"
+                            f"Status: Ready",
+                color=COLORS['success']
+            )
+            await ctx.respond(embed=embed, ephemeral=True)
+        else:
+            await ctx.respond(
+                f"{ICONS['warning']} Account added to database but Modal profile creation failed: {msg2}",
+                ephemeral=True
+            )
+    else:
+        await ctx.respond(
+            f"{ICONS['error']} {msg}",
+            ephemeral=True
+        )
 
 @bot.slash_command(name="list_accounts", description="View all Modal accounts")
 async def list_accounts(ctx: discord.ApplicationContext):

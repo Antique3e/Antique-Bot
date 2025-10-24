@@ -3,10 +3,13 @@ User Configuration Menu - Add account, Switch account, Go back
 """
 
 import discord
-from discord.ui import Button, View, Modal, TextInput, Select
+from discord.ui import Button, View, Select
+
+# Note: TextInput/Modal features removed for compatibility
+# Users will add accounts via slash command instead
 
 
-class AddAccountModal(Modal):
+class AddAccountModal_DISABLED:
     """Modal for adding a new Modal.com account"""
     
     def __init__(self):
