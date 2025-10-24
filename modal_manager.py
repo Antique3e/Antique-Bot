@@ -414,13 +414,16 @@ class ModalManager:
         
         # Update selected GPU
         account_manager.update_selected_gpu(username, gpu)
-        
+
+    
         # TODO: Modify modal_comfyui_run.py to use the selected GPU
         # This requires dynamically modifying the Python file or passing GPU as env var
         
         # Deploy the run script
         script_path = config.MODAL_FILES['comfyui_run']
-        command = config.get_modal_command('run', file_path=str(script_path))
+        # command = config.get_modal_command('run', file_path=str(script_path))  //OLD
+        command = f"GPU_TYPE={gpu} {config.get_modal_command('run', file_path=str(script_path))}" 
+        # NEW ABOVE ONE
         
         # Run in background (don't wait for completion)
         # We'll check if it's ready using the URL
