@@ -1,0 +1,260 @@
+# ============================================================================
+# ComfyUI Discord Bot - Git Ignore File
+# ============================================================================
+# This file tells Git which files to NEVER commit to the repository.
+# These files contain secrets, local data, or temporary files.
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# SECRETS & CREDENTIALS (CRITICAL - NEVER COMMIT THESE!)
+# ----------------------------------------------------------------------------
+
+# Environment variables (contains Discord token)
+.env
+
+# Encryption key for Modal tokens
+.encryption_key
+
+# Database with encrypted account credentials
+accounts.db
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Modal configuration files (may contain tokens)
+.modal/
+modal.toml
+
+# Any backup files
+*.backup
+*.bak
+
+# ----------------------------------------------------------------------------
+# PYTHON
+# ----------------------------------------------------------------------------
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Virtual environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# ----------------------------------------------------------------------------
+# LOGS & TEMPORARY FILES
+# ----------------------------------------------------------------------------
+
+# Log files
+logs/
+*.log
+
+# Temporary files
+temp/
+tmp/
+*.tmp
+
+# OS temporary files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ----------------------------------------------------------------------------
+# IDE & EDITOR FILES
+# ----------------------------------------------------------------------------
+
+# Visual Studio Code
+.vscode/
+*.code-workspace
+
+# PyCharm
+.idea/
+*.iml
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+
+# ----------------------------------------------------------------------------
+# DOWNLOADED FILES & OUTPUTS
+# ----------------------------------------------------------------------------
+
+# Downloaded workflow files
+workflows/
+*.json.download
+
+# Downloaded output files from Modal
+outputs/
+output/
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.mp4
+*.webm
+*.webp
+
+# Except example files (if you want to keep examples)
+!example_workflow.json
+!README_images/
+
+# ----------------------------------------------------------------------------
+# SYSTEM FILES
+# ----------------------------------------------------------------------------
+
+# Windows
+Desktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+
+# Linux
+.directory
+.Trash-*
+
+# ----------------------------------------------------------------------------
+# PROJECT SPECIFIC
+# ----------------------------------------------------------------------------
+
+# Test files
+test_*.py
+*_test.py
+tests/output/
+
+# Documentation builds
+docs/_build/
+docs/_static/
+docs/_templates/
+
+# Configuration overrides (if you create local configs)
+config_local.py
+local_settings.py
+
+# Modal deployment artifacts
+.modal-cache/
+
+# ----------------------------------------------------------------------------
+# SECURITY SENSITIVE FILES
+# ----------------------------------------------------------------------------
+
+# SSH keys
+*.pem
+*.key
+*.pub
+id_rsa*
+id_dsa*
+id_ecdsa*
+id_ed25519*
+
+# SSL certificates
+*.crt
+*.cer
+*.der
+*.p7b
+*.p7c
+*.pfx
+*.p12
+
+# API keys or token files
+*_token.txt
+*_secret.txt
+api_keys.txt
+
+# ----------------------------------------------------------------------------
+# NOTES
+# ----------------------------------------------------------------------------
+#
+# REMEMBER:
+# - If you accidentally commit a secret, changing .gitignore won't remove it
+# - You must remove it from Git history using git filter-branch or BFG
+# - Rotate any exposed secrets immediately
+# - The .env.example file SHOULD be committed (it has no secrets)
+#
+# TO CHECK WHAT WILL BE COMMITTED:
+#   git status
+#   git diff --cached
+#
+# TO CHECK IF A FILE IS IGNORED:
+#   git check-ignore -v filename
+#
+# ============================================================================
