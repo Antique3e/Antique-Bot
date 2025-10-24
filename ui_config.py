@@ -297,9 +297,9 @@ MODAL_CONFIG = {
 TIMING = {
     'credit_check_interval': 3600,    # Check credits every 1 hour (in seconds)
     'switch_warning_time': 1200,      # Warn 20 minutes before switch (20 * 60)
-    'setup_estimate_step1': 7200,     # Step 1 takes ~2 hours (in seconds)
-    'setup_estimate_step2': 1200,     # Step 2 takes ~20 minutes (in seconds)
-    'comfy_startup_timeout': 300,     # Wait max 5 minutes for ComfyUI to start
+    'setup_estimate_step1': 14400,    # Step 1 takes ~4 hours (in seconds) - 100GB+ downloads
+    'setup_estimate_step2': 2400,     # Step 2 takes ~40 minutes (in seconds)
+    'comfy_startup_timeout': 900,     # Wait max 15 minutes for ComfyUI to start
 }
 
 # ============================================================================

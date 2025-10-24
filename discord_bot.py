@@ -4,6 +4,7 @@ ComfyUI Discord Bot
 Main Discord bot that controls Modal ComfyUI deployments.
 
 Features:
+- Button-based UI for easy control
 - Add/manage multiple Modal accounts
 - Auto-switch accounts when credits low
 - Start/stop ComfyUI with GPU selection
@@ -12,10 +13,12 @@ Features:
 """
 
 import discord
+from discord.ext import commands, tasks
 from discord import option
 from discord.ext import commands, tasks
 import asyncio
 import logging
+import logging.config
 import sys
 from datetime import datetime, timedelta
 from typing import Optional
@@ -28,6 +31,9 @@ from ui_config import COLORS, ICONS, MESSAGES, BUTTON_LABELS, get_battery_icon, 
 from account_manager import account_manager
 from modal_manager import modal_manager
 from workflow_manager import initialize_workflow_manager, workflow_manager as wf_manager
+
+# Import button-based views
+from views import MainControlPanel
 
 # Setup logging
 logging.config.dictConfig(config.LOGGING)
@@ -229,7 +235,7 @@ async def handle_auto_switch(account: dict):
         )
 
 async def run_full_setup(username: str):
-    """Run full setup (step 1 + step 2) on an account."""
+    """Run complete setup (app1.py + app2.py) on an account."""
     logger.info(f"Running full setup for '{username}'")
     
     try:
@@ -237,46 +243,32 @@ async def run_full_setup(username: str):
         await notify_owner(
             f"{ICONS['building']} Setup Started",
             f"Starting setup on account `{username}`...\n\n"
-            f"⏱️ Estimated time: 2 hours 20 minutes\n"
-            f"Step 1: Download models (2h)\n"
-            f"Step 2: Install dependencies (20m)",
+            f"⏱️ Step 1 (app1.py): ~2 hours\n"
+            f"⏱️ Step 2 (app2.py): ~20 minutes\n"
+            f"Total: 2 hours 20 minutes",
             COLORS['building']
         )
         
-        # Run step 1
-        success, msg = await modal_manager.deploy_setup_step1(username)
+        # Run complete setup (both app1.py and app2.py sequentially)
+        success, msg = await modal_manager.deploy_setup(username, gpu="T4")
+        
         if not success:
             await notify_owner(
-                "❌ Setup Step 1 Failed",
+                "❌ Setup Failed",
                 f"Account: `{username}`\nError: {msg}",
                 COLORS['error']
             )
             return
         
-        logger.info(f"Setup step 1 completed for '{username}'")
-        
-        # Run step 2
-        success, msg = await modal_manager.deploy_setup_step2(username)
-        if not success:
-            await notify_owner(
-                "❌ Setup Step 2 Failed",
-                f"Account: `{username}`\nError: {msg}",
-                COLORS['error']
-            )
-            return
-        
-        logger.info(f"Setup step 2 completed for '{username}'")
+        logger.info(f"Setup completed for '{username}'")
         
         # Notify completion
-        jupyter_url = config.CLOUDFLARE_URLS['jupyter']
-        comfyui_url = config.CLOUDFLARE_URLS['comfyui']
-        
         await notify_owner(
             f"{ICONS['success']} Setup Complete!",
             f"Account `{username}` is ready!\n\n"
-            f"{ICONS['success']} JupyterLab: {jupyter_url}\n"
-            f"{ICONS['success']} ComfyUI: {comfyui_url}\n\n"
-            f"Use `/start` to begin using ComfyUI.",
+            f"✅ app1.py completed (models downloaded)\n"
+            f"✅ app2.py completed (dependencies installed)\n\n"
+            f"Use `/start` to run ComfyUI.",
             COLORS['success']
         )
         
@@ -419,22 +411,101 @@ async def list_accounts(ctx: discord.ApplicationContext):
     await ctx.respond(embed=embed)
 
 @bot.slash_command(name="switch_account", description="Switch to a different Modal account")
-@option("username", description="Account to switch to", required=True)
-async def switch_account(ctx: discord.ApplicationContext, username: str):
-    """Manually switch to a different account."""
-    await ctx.defer()
+async def switch_account(ctx: discord.ApplicationContext):
+    """Manually switch to a different account using a dropdown menu."""
     
-    success, msg = await modal_manager.switch_to_account(username)
+    # Get all accounts
+    accounts = account_manager.get_all_accounts()
     
-    if success:
-        embed = discord.Embed(
-            title=f"{ICONS['switching']} Account Switched",
-            description=f"Switched to account `{username}`",
-            color=COLORS['success']
-        )
-        await ctx.respond(embed=embed)
-    else:
-        await ctx.respond(f"{ICONS['error']} {msg}", ephemeral=True)
+    if not accounts:
+        await ctx.respond("No accounts found. Use `/add_account` to add one!", ephemeral=True)
+        return
+    
+    # Get currently active account
+    active_account = account_manager.get_active_account()
+    active_username = active_account['username'] if active_account else None
+    
+    # Create dropdown menu view
+    class AccountSelectView(discord.ui.View):
+        def __init__(self):
+            super().__init__(timeout=60)
+            
+            # Create select menu options
+            options = []
+            for account in accounts:
+                username = account['username']
+                balance = account['balance']
+                status = account['status']
+                
+                # Add checkmark for active account
+                label = f"{'✅ ' if username == active_username else ''}{username}"
+                
+                # Status emoji
+                if username == active_username:
+                    emoji = ICONS['active']
+                elif balance < config.MIN_CREDIT_THRESHOLD:
+                    emoji = ICONS['dead']
+                else:
+                    emoji = ICONS[status]
+                
+                description = f"${balance:.2f} • {status.upper()}"
+                
+                options.append(discord.SelectOption(
+                    label=label,
+                    value=username,
+                    description=description,
+                    emoji=emoji
+                ))
+            
+            select = discord.ui.Select(
+                placeholder="Select an account to switch to...",
+                options=options
+            )
+            select.callback = self.select_callback
+            self.add_item(select)
+        
+        async def select_callback(self, interaction: discord.Interaction):
+            selected_username = interaction.data['values'][0]
+            
+            # Check if already active
+            if selected_username == active_username:
+                await interaction.response.edit_message(
+                    content=f"{ICONS['info']} Account `{selected_username}` is already active!",
+                    view=None,
+                    embed=None
+                )
+                return
+            
+            await interaction.response.edit_message(
+                content=f"{ICONS['loading']} Switching to account `{selected_username}`...",
+                view=None,
+                embed=None
+            )
+            
+            # Switch account
+            success, msg = await modal_manager.switch_to_account(selected_username)
+            
+            if success:
+                embed = discord.Embed(
+                    title=f"{ICONS['switching']} Account Switched",
+                    description=f"Successfully switched to `{selected_username}`",
+                    color=COLORS['success']
+                )
+                await interaction.edit_original_response(content=None, embed=embed)
+            else:
+                await interaction.edit_original_response(
+                    content=f"{ICONS['error']} {msg}",
+                    embed=None
+                )
+    
+    view = AccountSelectView()
+    embed = discord.Embed(
+        title=f"{ICONS['switching']} Switch Account",
+        description=f"Currently active: `{active_username or 'None'}`\n\nSelect an account from the dropdown below:",
+        color=COLORS['info']
+    )
+    
+    await ctx.respond(embed=embed, view=view)
 
 @bot.slash_command(name="check_balance", description="Check credit balance for all accounts")
 async def check_balance(ctx: discord.ApplicationContext):
@@ -481,19 +552,52 @@ async def check_balance(ctx: discord.ApplicationContext):
 # COMFYUI CONTROL COMMANDS
 # ============================================================================
 
-@bot.slash_command(name="start", description="Start ComfyUI")
+@bot.slash_command(name="start", description="Open ComfyUI control panel")
 async def start_comfyui(ctx: discord.ApplicationContext):
-    """Start ComfyUI with GPU selection."""
-    await ctx.defer()
+    """Open the main control panel with buttons."""
     
+    # Check if there's an active account
     active_account = account_manager.get_active_account()
     
     if not active_account:
         await ctx.respond(
-            f"{ICONS['error']} No active account. Use `/switch_account` to activate one.",
-            ephemeral=True
+            f"{ICONS['warning']} No active account!\n"
+            f"Use the **User Config** button to add or switch accounts.",
+            view=MainControlPanel(bot),
+            ephemeral=False
         )
         return
+    
+    username = active_account['username']
+    status = active_account.get('status', 'unknown')
+    
+    # Create embed with current status
+    embed = discord.Embed(
+        title="🎮 ComfyUI Control Panel",
+        description=f"**Account:** `{username}`\n**Status:** {status.upper()}",
+        color=COLORS.get('active', discord.Color.blue())
+    )
+    
+    # Add server info if running
+    if modal_manager.current_deployment:
+        deployment = modal_manager.current_deployment
+        gpu = deployment.get('gpu', 'Unknown')
+        
+        embed.add_field(
+            name="🖥️ Server Info",
+            value=f"**GPU:** {gpu}\n"
+                  f"**JupyterLab:** [Open]({deployment['jupyter_url']})\n"
+                  f"**ComfyUI:** [Open]({deployment['comfyui_url']})",
+            inline=False
+        )
+    else:
+        embed.add_field(
+            name="📍 Status",
+            value="Server is not running. Click **▶️ Start** to begin.",
+            inline=False
+        )
+    
+    await ctx.respond(embed=embed, view=MainControlPanel(bot), ephemeral=False)
     
     # Create GPU selection view
     class GPUSelectView(discord.ui.View):
@@ -745,7 +849,7 @@ async def setup(ctx: discord.ApplicationContext):
     
     if not active_account:
         await ctx.respond(
-            f"{ICONS['error']} No active account. Use `/switch_account` first.",
+            f"{ICONS['error']} No active account. Use the `/start` button menu to add an account.",
             ephemeral=True
         )
         return
@@ -753,7 +857,10 @@ async def setup(ctx: discord.ApplicationContext):
     embed = discord.Embed(
         title=f"{ICONS['building']} Setup Started",
         description=f"Starting setup on account `{active_account['username']}`\n\n"
-                    f"⏱️ Estimated time: 2 hours 20 minutes",
+                    f"⏱️ Step 1 (app1.py): ~2 hours\n"
+                    f"⏱️ Step 2 (app2.py): ~20 minutes\n"
+                    f"Total: 2 hours 20 minutes\n\n"
+                    f"I'll notify you when complete!",
         color=COLORS['building']
     )
     await ctx.respond(embed=embed)

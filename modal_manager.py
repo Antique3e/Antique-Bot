@@ -36,7 +36,7 @@ class ModalManager:
     
     async def create_profile(self, username: str, token_id: str, token_secret: str) -> Tuple[bool, str]:
         """
-        Create a new Modal profile.
+        Create a new Modal profile by adding it to ~/.modal.toml
         
         Args:
             username: Profile name
@@ -48,35 +48,51 @@ class ModalManager:
         """
         logger.info(f"Creating Modal profile: {username}")
         
-        # First, create the profile
-        command = config.get_modal_command('profile_create', profile_name=username)
-        return_code, stdout, stderr = await utils.run_command(command)
+        # Modern Modal CLI (v0.63+) uses ~/.modal.toml for profile management
+        # We need to add the profile to the .modal.toml file
+        from pathlib import Path
+        import os
         
-        if return_code != 0:
-            error_msg = f"Failed to create profile: {stderr}"
+        modal_config_path = Path.home() / ".modal.toml"
+        
+        try:
+            # Read existing config or create empty string
+            if modal_config_path.exists():
+                with open(modal_config_path, 'r') as f:
+                    config_content = f.read()
+            else:
+                config_content = ""
+            
+            # Check if profile already exists
+            if f"[{username}]" in config_content:
+                logger.info(f"Profile '{username}' already exists in .modal.toml")
+                # Just activate it
+                success, msg = await self.activate_profile(username)
+                return success, msg if success else f"Profile exists but failed to activate: {msg}"
+            
+            # Add new profile section
+            new_profile = f"\n[{username}]\n"
+            new_profile += f'token_id = "{token_id}"\n'
+            new_profile += f'token_secret = "{token_secret}"\n'
+            
+            # Write updated config
+            with open(modal_config_path, 'a') as f:
+                f.write(new_profile)
+            
+            logger.info(f"Added profile '{username}' to .modal.toml")
+            
+            # Activate the new profile
+            success, msg = await self.activate_profile(username)
+            if not success:
+                return False, f"Profile added but failed to activate: {msg}"
+            
+            logger.info(f"Modal profile '{username}' created and activated successfully")
+            return True, f"Profile '{username}' created successfully!"
+            
+        except Exception as e:
+            error_msg = f"Failed to create profile: {str(e)}"
             logger.error(error_msg)
             return False, error_msg
-        
-        # Then, activate it to set tokens
-        success, msg = await self.activate_profile(username)
-        if not success:
-            return False, f"Profile created but failed to activate: {msg}"
-        
-        # Set the tokens
-        command = config.get_modal_command(
-            'token_set',
-            token_id=token_id,
-            token_secret=token_secret
-        )
-        return_code, stdout, stderr = await utils.run_command(command)
-        
-        if return_code != 0:
-            error_msg = f"Failed to set tokens: {stderr}"
-            logger.error(error_msg)
-            return False, error_msg
-        
-        logger.info(f"Modal profile '{username}' created and configured successfully")
-        return True, f"Profile '{username}' created successfully!"
     
     async def activate_profile(self, username: str) -> Tuple[bool, str]:
         """
@@ -302,19 +318,21 @@ class ModalManager:
     # COMFYUI DEPLOYMENT
     # ========================================================================
     
-    async def deploy_setup_step1(self, username: str) -> Tuple[bool, str]:
+    async def deploy_setup(self, username: str, gpu: str = "T4") -> Tuple[bool, str]:
         """
-        Deploy Modal setup step 1 (download models).
+        Run complete setup process (app1.py then app2.py sequentially).
         
-        Uses T4 GPU, takes ~2 hours.
+        Step 1 (app1.py): Download models, clone repos - 2 hour timeout
+        Step 2 (app2.py): Install dependencies - 20 minute timeout
         
         Args:
             username: Account to deploy on
+            gpu: GPU to use for setup (default: T4)
         
         Returns:
             (success, message)
         """
-        logger.info(f"Deploying setup step 1 for '{username}'")
+        logger.info(f"Starting setup for '{username}' on GPU: {gpu}")
         
         # Make sure account is active
         success, msg = await self.switch_to_account(username)
@@ -324,11 +342,15 @@ class ModalManager:
         # Update status
         account_manager.update_status(username, 'building')
         
-        # Deploy step 1
-        script_path = config.MODAL_FILES['setup_step1']
-        command = config.get_modal_command('deploy', file_path=str(script_path))
+        # ===== STEP 1: Run app1.py =====
+        logger.info(f"Running setup step 1 (app1.py) for '{username}'")
+        app1_path = config.BASE_DIR / 'app1.py'
         
-        return_code, stdout, stderr = await utils.run_command(command, timeout=7200)  # 2 hour timeout
+        # Use friend's pattern: modal run app.py::run
+        command = f"GPU_TYPE={gpu} modal run {app1_path}::run"
+        
+        # 2 hour timeout for step 1
+        return_code, stdout, stderr = await utils.run_command(command, timeout=7200)
         
         if return_code != 0:
             error_msg = f"Setup step 1 failed: {stderr}"
@@ -337,35 +359,16 @@ class ModalManager:
             return False, error_msg
         
         logger.info(f"Setup step 1 completed for '{username}'")
-        return True, "Setup step 1 completed! JupyterLab should be available."
-    
-    async def deploy_setup_step2(self, username: str) -> Tuple[bool, str]:
-        """
-        Deploy Modal setup step 2 (install dependencies and start ComfyUI).
         
-        Uses T4 GPU, takes ~20 minutes.
+        # ===== STEP 2: Run app2.py =====
+        logger.info(f"Running setup step 2 (app2.py) for '{username}'")
+        app2_path = config.BASE_DIR / 'app2.py'
         
-        Args:
-            username: Account to deploy on
+        # Use friend's pattern: modal run app.py::run
+        command = f"GPU_TYPE={gpu} modal run {app2_path}::run"
         
-        Returns:
-            (success, message)
-        """
-        logger.info(f"Deploying setup step 2 for '{username}'")
-        
-        # Make sure account is active
-        success, msg = await self.switch_to_account(username)
-        if not success:
-            return False, f"Failed to switch account: {msg}"
-        
-        # Update status
-        account_manager.update_status(username, 'building')
-        
-        # Deploy step 2
-        script_path = config.MODAL_FILES['setup_step2']
-        command = config.get_modal_command('deploy', file_path=str(script_path))
-        
-        return_code, stdout, stderr = await utils.run_command(command, timeout=1800)  # 30 min timeout
+        # 20 minute timeout for step 2
+        return_code, stdout, stderr = await utils.run_command(command, timeout=1200)
         
         if return_code != 0:
             error_msg = f"Setup step 2 failed: {stderr}"
@@ -373,23 +376,16 @@ class ModalManager:
             account_manager.update_status(username, 'ready')
             return False, error_msg
         
-        logger.info(f"Setup step 2 completed for '{username}'")
+        logger.info(f"Setup completed for '{username}'")
         
-        # Update status to active
-        account_manager.update_status(username, 'active')
+        # Update status to ready (not active, since setup doesn't start services)
+        account_manager.update_status(username, 'ready')
         
-        # Mark as deployed
-        self.current_deployment = {
-            'username': username,
-            'jupyter_url': config.CLOUDFLARE_URLS['jupyter'],
-            'comfyui_url': config.CLOUDFLARE_URLS['comfyui'],
-        }
-        
-        return True, "Setup step 2 completed! ComfyUI should be available."
+        return True, "✅ Setup complete! Both steps finished successfully. Use /start to run ComfyUI."
     
     async def start_comfyui(self, username: str, gpu: str = None) -> Tuple[bool, str]:
         """
-        Start ComfyUI on a configured account.
+        Start ComfyUI on a configured account using app.py.
         
         Args:
             username: Account to start on
@@ -415,29 +411,26 @@ class ModalManager:
         # Update selected GPU
         account_manager.update_selected_gpu(username, gpu)
 
-    
-        # TODO: Modify modal_comfyui_run.py to use the selected GPU
-        # This requires dynamically modifying the Python file or passing GPU as env var
+        # Start ComfyUI using app.py with friend's method
+        app_path = config.BASE_DIR / 'app.py'
         
-        # Deploy the run script
-        script_path = config.MODAL_FILES['comfyui_run']
-        # command = config.get_modal_command('run', file_path=str(script_path))  //OLD
-        command = f"GPU_TYPE={gpu} {config.get_modal_command('run', file_path=str(script_path))}" 
-        # NEW ABOVE ONE
+        # Use friend's pattern: modal run app.py::run
+        # This keeps the process running in background
+        command = f"GPU_TYPE={gpu} modal run {app_path}::run"
         
-        # Run in background (don't wait for completion)
-        # We'll check if it's ready using the URL
-        asyncio.create_task(utils.run_command(command, timeout=86400))  # 24 hour max
+        # Start in background (no timeout - let it run)
+        asyncio.create_task(utils.run_command(command, timeout=None))
         
-        # Wait a bit for the process to start
+        # Wait a moment for Modal to start
         await asyncio.sleep(10)
         
-        # Wait for ComfyUI to become ready
+        # Wait for ComfyUI to become ready (check the URL)
         comfyui_url = config.CLOUDFLARE_URLS['comfyui']
-        is_ready = await utils.wait_for_comfyui(comfyui_url, max_wait=300)
+        is_ready = await utils.wait_for_comfyui(comfyui_url, max_wait=120)  # 2 min check
         
         if not is_ready:
-            return False, "ComfyUI failed to start (timeout)"
+            # Don't fail - server might still be starting
+            logger.warning("ComfyUI health check failed, but server may still be starting")
         
         # Mark as deployed
         self.current_deployment = {

@@ -9,6 +9,10 @@ For visual/UI changes, edit ui_config.py instead.
 
 import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # ============================================================================
 # PROJECT PATHS
@@ -99,13 +103,13 @@ SWITCH_WARNING_TIME = 1200
 
 # Setup time estimates (in seconds)
 SETUP_TIME = {
-    'step1': 7200,    # 2 hours for model downloads
-    'step2': 1200,    # 20 minutes for dependency installation
+    'step1': 14400,   # 4 hours for model downloads (100GB+ on slower connections)
+    'step2': 2400,    # 40 minutes for dependency installation
 }
 
 # ComfyUI startup timeout (in seconds)
 # How long to wait for ComfyUI to become ready
-COMFYUI_STARTUP_TIMEOUT = 300  # 5 minutes
+COMFYUI_STARTUP_TIMEOUT = 900  # 15 minutes (increased for slower GPU spin-up)
 
 # How often to check if ComfyUI is ready (in seconds)
 COMFYUI_CHECK_INTERVAL = 5

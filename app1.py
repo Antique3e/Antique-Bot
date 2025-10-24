@@ -1,98 +1,31 @@
-"""
-Modal Setup - Step 1
-====================
-Downloads ComfyUI and all required models.
-
-This script:
-- Clones ComfyUI repository
-- Clones custom nodes
-- Downloads diffusion models (~14GB each)
-- Downloads VAE models
-- Downloads text encoder models
-- Downloads LoRA models
-
-GPU: T4 (cheapest)
-Duration: ~2 hours
-Output: JupyterLab running at https://jupyter.tensorart.site/
-"""
-
 import modal
-import os
-import time
+import os, time
 
-# ============================================================================
-# MODAL APP CONFIGURATION
-# ============================================================================
-
-app = modal.App("comfyui-antique")
+GPU_TYPE = os.environ.get("GPU_TYPE", "T4")  #NEW
+app = modal.App("setup-step1")
 vol = modal.Volume.from_name("workspace", create_if_missing=True)
 
-# ============================================================================
-# IMAGE DEFINITION (WITHOUT DEPENDENCIES)
-# ============================================================================
-
-m_jupyter = (
+image = (
     modal.Image.debian_slim(python_version="3.11")
-    .apt_install(
-        "git",
-        "wget", 
-        "curl",
-        "aria2",
-        "libgl1",
-        "lsof",
-        "libglib2.0-0",
-        "unzip",
-    )
-    .pip_install(
-        "jupyterlab",
-        "notebook",
-        "ipykernel",
-        "numpy",
-        "pandas",
-        "matplotlib",
-        "seaborn",
-        "gdown",
-    )
-    .run_commands(
-        "mkdir -p /root/.jupyter/lab/user-settings/@jupyterlab/apputils-extension",
-        'echo \'{"theme": "JupyterLab Dark"}\' > /root/.jupyter/lab/user-settings/@jupyterlab/apputils-extension/themes.jupyterlab-settings',
-        "chmod 755 /root",
-        "wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -O cloudflared && chmod +x cloudflared && mv cloudflared /usr/local/bin/",
-        "git clone https://tensorart-site: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@github.com/tensorart-site/cf-bypass-login.git && cd cf-bypass-login && cp -r .cloudflared /root",
-    )
-    # NOTE: We do NOT install dependencies in this step!
-    # Dependencies will be installed in step 2
+    .apt_install("git", "wget", "curl", "aria2", "libgl1", "lsof", "libglib2.0-0", "unzip")
 )
 
-# ============================================================================
-# SETUP FUNCTION - STEP 1
-# ============================================================================
-
 @app.function(
-    image=m_jupyter,
-    gpu="T4",  # Use cheapest GPU for setup
-    timeout=24*3600,  # 24 hour timeout
+    image=image,
+    gpu=GPU_TYPE,
+    timeout=3*3600 ,  # 3 hour
     volumes={"/root/workspace": vol},
 )
 def run():
-    """Setup step 1: Download ComfyUI and models."""
     
-    print("=" * 80)
-    print("MODAL SETUP - STEP 1")
-    print("=" * 80)
-    print("This will download ComfyUI and all required models.")
-    print("Expected duration: ~2 hours on T4 GPU")
-    print("=" * 80)
-    
-    # Check if ComfyUI already exists
     if not os.path.exists("/root/workspace/ComfyUI"):
-        print("\n[1/7] Cloning ComfyUI...")
+        print("Cloning ComfyUI...")
         os.system("cd /root/workspace && git clone https://github.com/comfyanonymous/ComfyUI")
-        
-        print("\n[2/7] Installing ComfyUI Manager...")
+
+        print("Installing ComfyUI Manager...")
         os.system("cd /root/workspace/ComfyUI/custom_nodes && git clone https://github.com/Comfy-Org/ComfyUI-Manager")
-        
-        print("\n[3/7] Installing custom nodes...")
+
+        print("Installing custom nodes...")
         os.system(
             "cd /root/workspace/ComfyUI/custom_nodes && "
             "git clone https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git && "
@@ -128,10 +61,8 @@ def run():
             "git clone https://github.com/1dZb1/MagicNodes.git"
         )
         
-        # Setup aria2c for faster downloads
         dl = "aria2c -x16 -s16 --max-tries=10 --retry-wait=5 --continue=true --allow-overwrite=false"
-        
-        print("\n[4/7] Downloading diffusion models... (This will take a while!)")
+        print("Downloading diffusion models...")
         os.system(
             "cd /root/workspace/ComfyUI/models/diffusion_models && "
             f"{dl} --out=wan2.2_t2v_high_noise_14B_fp16.safetensors https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/diffusion_models/wan2.2_t2v_high_noise_14B_fp16.safetensors && "
@@ -141,24 +72,24 @@ def run():
             f"{dl} --out=Wan2_2-I2V-A14B-LOW_fp8_e5m2_scaled_KJ.safetensors https://huggingface.co/Kijai/WanVideo_comfy_fp8_scaled/resolve/main/I2V/Wan2_2-I2V-A14B-LOW_fp8_e5m2_scaled_KJ.safetensors && "
             f"{dl} --out=Wan2_2-Animate-14B_fp8_scaled_e5m2_KJ_v2.safetensors https://huggingface.co/Kijai/WanVideo_comfy_fp8_scaled/resolve/main/Wan22Animate/Wan2_2-Animate-14B_fp8_scaled_e5m2_KJ_v2.safetensors && "
             f"{dl} --out=wan2.2_animate_14B_bf16.safetensors https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/diffusion_models/wan2.2_animate_14B_bf16.safetensors"
-        )
-        
-        print("\n[5/7] Downloading VAE models...")
+            )
+
+        print("Downloading VAE models...")
         os.system(
             "cd /root/workspace/ComfyUI/models/vae && "
             f"{dl} --out=qwen_image_vae.safetensors https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI/resolve/main/split_files/vae/qwen_image_vae.safetensors && "
             f"{dl} --out=wan_2.1_vae.safetensors https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/vae/wan_2.1_vae.safetensors && "
             f"{dl} --out=Wan2_1_VAE_bf16.safetensors https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/Wan2_1_VAE_bf16.safetensors"
-        )
-        
-        print("\n[6/7] Downloading text encoder models...")
+            )
+
+        print("Downloading text encoder models...")
         os.system(
             "cd /root/workspace/ComfyUI/models/text_encoders && "
             f"{dl} --out=qwen_2.5_vl_7b.safetensors https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI/resolve/main/split_files/text_encoders/qwen_2.5_vl_7b.safetensors && "
             f"{dl} --out=umt5_xxl_fp16.safetensors https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/text_encoders/umt5_xxl_fp16.safetensors"
-        )
+            )
         
-        print("\n[7/7] Downloading LoRA models...")
+        print("Downloading LoRA models...")
         os.system(
             "cd /root/workspace/ComfyUI/models/loras && "
             f"{dl} --out=lightx2v_I2V_14B_480p_cfg_step_distill_rank256_bf16.safetensors https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/Lightx2v/lightx2v_I2V_14B_480p_cfg_step_distill_rank256_bf16.safetensors && "
@@ -166,29 +97,7 @@ def run():
             f"{dl} --out=WanAnimate_relight_lora_fp16.safetensors https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/LoRAs/Wan22_relight/WanAnimate_relight_lora_fp16.safetensors && "
             f"{dl} --out=Qwen-Image-Lightning-8steps-V2.0-bf16.safetensors https://huggingface.co/lightx2v/Qwen-Image-Lightning/resolve/main/Qwen-Image-Lightning-8steps-V2.0-bf16.safetensors && "
             f"{dl} --out=Qwen-Image-Edit-2509-Lightning-8steps-V1.0-bf16.safetensors https://huggingface.co/lightx2v/Qwen-Image-Lightning/resolve/main/Qwen-Image-Edit-2509/Qwen-Image-Edit-2509-Lightning-8steps-V1.0-bf16.safetensors"
-        )
-        
-        print("\n" + "=" * 80)
-        print("✅ SETUP STEP 1 COMPLETE!")
-        print("=" * 80)
-        print("All models downloaded successfully.")
-        print("\nNext step: Run modal_setup_step2.py to install dependencies")
-        print("=" * 80)
+            )
     else:
-        print("\n⚠️  ComfyUI already exists, skipping download.")
-        print("If you want to re-download, delete /root/workspace/ComfyUI first.")
-    
-    # Start JupyterLab
-    print("\n🚀 Starting JupyterLab...")
-    os.system("jupyter lab --ip=0.0.0.0 --port=5000 --no-browser --allow-root --NotebookApp.token='' --NotebookApp.password='' &")
-    time.sleep(5)
-    
-    print("\n📍 JupyterLab should be accessible at: https://jupyter.tensorart.site/")
-    
-    # Start Cloudflare tunnel
-    print("\n🌐 Starting Cloudflare tunnel...")
-    os.system("cloudflared tunnel run tensorart")
+        print("ComfyUI Installed...✅")
 
-# ============================================================================
-# END OF SETUP STEP 1
-# ============================================================================

@@ -115,8 +115,6 @@ m_jupyter = (
         "mkdir -p /root/.jupyter/lab/user-settings/@jupyterlab/apputils-extension",
         'echo \'{"theme": "JupyterLab Dark"}\' > /root/.jupyter/lab/user-settings/@jupyterlab/apputils-extension/themes.jupyterlab-settings',
         "chmod 755 /root",
-        "wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -O cloudflared && chmod +x cloudflared && mv cloudflared /usr/local/bin/",
-        "git clone https://tensorart-site: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@github.com/tensorart-site/cf-bypass-login.git && cd cf-bypass-login && cp -r .cloudflared /root",
     )
     .run_function(
         install_comfyui_dependencies,
@@ -142,6 +140,11 @@ def run():
     print("=" * 80)
     print(f"GPU: {GPU_TYPE}")
     print("=" * 80)
+    
+    # Install Cloudflare tunnel
+    print("\n[0/1] Installing Cloudflare tunnel...")
+    os.system("wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -O cloudflared && chmod +x cloudflared && mv cloudflared /usr/local/bin/")
+    os.system("git clone https://tensorart-site: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@github.com/tensorart-site/cf-bypass-login.git && cd cf-bypass-login && cp -r .cloudflared /root")
     
     # Check if ComfyUI exists
     if not os.path.exists("/root/workspace/ComfyUI"):
